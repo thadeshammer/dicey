@@ -1,0 +1,24 @@
+__pycache__
+.pytest_cache
+.mypy_cache
+.vscode
+
+.venv
+venv
+
+logs/
+*.log
+
+tmux*
+
+.env*
+secrets/
+
+tmp/
+
+# Ignore build directories
+dist/
+build/
+
+# other
+notes.txt

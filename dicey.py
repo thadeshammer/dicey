@@ -7,8 +7,46 @@ import pygame
 screen_width, screen_height = 800, 600
 
 
-def roll_dice(dice_count: int):
-    return [random.randint(1, 6) for _ in range(dice_count)]
+@dataclass
+class PlayerState:
+    energy: int = 0
+    fury_points: int = 0
+
+
+def roll_dice(dice_count: int, player_state: PlayerState):
+    dice_values = []
+    temporary_dice = []
+    for _ in range(dice_count):
+        value = random.randint(1, 6)
+        dice_values.append(value)
+        if value == 1:
+            player_state.fury_points += 1
+        elif value in {2, 3}:
+            player_state.energy += 1
+        elif value in {4, 5}:
+            player_state.energy += 1
+            temporary_dice.extend(handle_blow_up(player_state))
+        elif value == 6:
+            player_state.energy += 1
+            temporary_dice.extend(handle_blow_up(player_state))
+    return dice_values, temporary_dice
+
+
+def handle_blow_up(player_state: PlayerState):
+    temp_dice = []
+    value = random.randint(1, 6)
+    temp_dice.append(value)
+    if value in {2, 3}:
+        player_state.energy += 1
+    elif value in {4, 5}:
+        player_state.energy += 1
+        temp_dice.extend(handle_blow_up(player_state))
+    elif value == 1:
+        player_state.fury_points += 1
+    elif value == 6:
+        player_state.energy += 1
+        temp_dice.extend(handle_blow_up(player_state))
+    return temp_dice
 
 
 @dataclass
@@ -46,7 +84,16 @@ class DiceDrawDeets:
         return screen_height - total_height
 
 
-def draw_dice(screen, dice_values, dice_data):
+def draw_dice(screen, dice_values, dice_data, temp_dice_values):
+    draw_individual_dice(
+        screen, dice_values, dice_data, (255, 255, 255)
+    )  # White for regular dice
+    draw_individual_dice(
+        screen, temp_dice_values, dice_data, (173, 216, 230)
+    )  # Light blue for temporary dice
+
+
+def draw_individual_dice(screen, dice_values, dice_data, color):
     dice_per_row = dice_data.dice_per_row
     for i, value in enumerate(dice_values):
         row = i // dice_per_row
@@ -54,7 +101,7 @@ def draw_dice(screen, dice_values, dice_data):
         dice_x = dice_data.x_start + col * (dice_data.size + dice_data.margin)
         dice_y = screen_height - (row + 1) * (dice_data.size + dice_data.margin)
         pygame.draw.rect(
-            screen, (255, 255, 255), (dice_x, dice_y, dice_data.size, dice_data.size)
+            screen, color, (dice_x, dice_y, dice_data.size, dice_data.size)
         )
         font = pygame.font.Font(
             None, int(dice_data.size * 0.6)
@@ -76,12 +123,13 @@ def main():
     fps = 30
 
     dice_count = 5
+    player_state = PlayerState()
 
     # Dice properties
     dice_data = DiceDrawDeets(dice_count=dice_count)
 
     # Initialize dice values
-    dice_values = roll_dice(dice_count)
+    dice_values, temp_dice_values = roll_dice(dice_count, player_state)
 
     running = True
     while running:
@@ -90,7 +138,7 @@ def main():
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 dice_count = min(dice_count + 2, 30)
-                dice_values = roll_dice(dice_count)
+                dice_values, temp_dice_values = roll_dice(dice_count, player_state)
                 dice_data = DiceDrawDeets(dice_count=dice_count)
             elif event.type == pygame.VIDEORESIZE:
                 screen_width, screen_height = event.w, event.h
@@ -100,7 +148,7 @@ def main():
                 dice_data = DiceDrawDeets(dice_count=dice_count)
 
         screen.fill((0, 0, 0))
-        draw_dice(screen, dice_values, dice_data)
+        draw_dice(screen, dice_values, dice_data, temp_dice_values)
         pygame.display.flip()
         clock.tick(fps)
 
