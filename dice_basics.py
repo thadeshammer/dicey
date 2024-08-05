@@ -12,7 +12,30 @@
 #   always produce 1 energy
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass
+class SortedPoolData:
+    # This is intended to handle values between 1-6 but would work fine for artibrary values.
+
+    # the given array of dice rolls, sorted least to greatest (values 1 through 6)
+    sorted_values: list[int]
+
+    # value_counts
+    #   counts of each value - 1, because it's zero indexed.
+    #   e.g. if the values rolled are [1, 1, 1, 1, 1]
+    #   then value_counts will be [5, 0, 0, 0, 0] i.e. index 0 represents value 1
+    value_counts: list[int]
+
+    # greater_than_counts
+    #   helps quickly answer the question "how many dice facings were value n or greater?"
+    #   e.g. If the rolls were [1, 1, 4, 5, 6] than this array will be [5, 3, 3, 3, 2, 1] i.e.
+    #       greater_than_counts[0] == "how many dice facings are 1 or greater?"
+    #       greater_than_counts[1] == "how many dice facings are 2 or greater?"
+    #       etc.
+    gte_counts: list[int]
+
 
 
 @dataclass
@@ -36,9 +59,8 @@ class DicePool:
 
         # Count the occurrences of each number in the input array
         for num in rolled_dice_values:
-            count[
-                num - 1
-            ] += 1  # Decrementing by 1 to map the numbers to the index range 0-5
+            # Decrementing by 1 to map the numbers to the index range 0-5
+            count[num - 1] += 1
 
         # Reconstruct the sorted array
         sorted_arr = []
@@ -47,16 +69,22 @@ class DicePool:
                 [i + 1] * count[i]
             )  # Incrementing by 1 to map the index back to the numbers 1-6
 
-        return sorted_arr, count
+        # Calculate the gte_counts array
+        gte_counts = [0] * 6
+        cumulative_count = 0
+        for i in range(5, -1, -1):  # Iterate from 5 down to 0
+            cumulative_count += count[i]
+            gte_counts[i] = cumulative_count
+
+        return SortedPoolData(sorted_values=sorted_arr, value_counts=count, gte_counts=gte_counts)
 
     @staticmethod
     def generate_values(n: int) -> list[int]:
         return [random.randint(1, 6) for _ in range(n)]
 
     @staticmethod
-    def roll_dice(n: int) -> tuple[list[int], list[int]]:
-        dice_rolls, face_counts = DicePool.counting_sort(DicePool.generate_values(n))
-        return dice_rolls, face_counts
+    def roll_dice(n: int) -> SortedPoolData:
+        return DicePool.counting_sort(DicePool.generate_values(n))
 
     def roll(self) -> RollResult:
         # roll basic dice, sort results
@@ -73,7 +101,7 @@ class DicePool:
 
         while unrolled_dice > 0:
             # roll the dice we have so far
-            sub_roll, faces = DicePool.roll_dice(unrolled_dice)
+            sub_roll, faces, gte = DicePool.roll_dice(unrolled_dice)
             rolled_dice_pool += sub_roll
             rolled_dice_faces += faces
 
@@ -84,13 +112,13 @@ class DicePool:
             # these six-sided dice are functionally faced with 0,1,2,3,4,5
 
             # each 2+ generates energy for this turn
-            accumulated_energy += faces[1] + faces[2] + faces[3] + faces[4] + faces[5]
+            accumulated_energy += gte[1]
 
             # each 1 generates fury
             accumulated_fury += faces[0]
 
-            # each 5+ "blows up" - generates a temporary void die (again, 4+ for zero-indexing)
-            added_void_dice = faces[4] + faces[5]  # faces[5-1] + faces[6-1]
+            # each 5+ "surges" - generates a temporary void die (again, 4+ for zero-indexing)
+            added_void_dice = gte[4]  # 5+ (5-1 for indexing)
             unrolled_dice += added_void_dice
             self.void_dice_pool += added_void_dice
 
